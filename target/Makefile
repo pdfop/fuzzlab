@@ -3,8 +3,8 @@ SGX_SDK ?= /opt/intel/sgxsdk
 SGX_MODE ?= HW
 SGX_ARCH ?= x64
 SGX_DEBUG ?= 1
-CC := /home/mycurse/AFLplusplus/afl-gcc
-CXX := /home/mycurse/AFLplusplus/afl-g++
+CC := afl-clang-lto
+CXX := afl-clang-lto++
 CC1 := gcc
 CXX1 := g++
 ifeq ($(shell getconf LONG_BIT), 32)

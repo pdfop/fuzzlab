@@ -67,8 +67,11 @@ int SGX_CDECL main(int argc, char *argv[])
     status = sgx_create_enclave(ENCLAVE_FILENAME, SGX_DEBUG_FLAG, &token, &updated, &global_eid, NULL); 
     printf("Enclave successfully initilised.\n");
     // making a basic ecall which will be followed by a basic ocall by the enclave 
-    ecall_echo(global_eid, input);
+    while (__AFL_LOOP(1000)){
+	
+	ecall_echo(global_eid, input);
 
+	}
     // quoting process 
 
     /* 
