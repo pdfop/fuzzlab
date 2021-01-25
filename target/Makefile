@@ -3,10 +3,12 @@ SGX_SDK ?= /opt/intel/sgxsdk
 SGX_MODE ?= HW
 SGX_ARCH ?= x64
 SGX_DEBUG ?= 1
-CC := afl-clang-lto
-CXX := afl-clang-lto++
+CC := afl-gcc-fast
+CXX := afl-g++-fast
 CC1 := gcc
 CXX1 := g++
+AFL_CC := gcc 
+AFL_CXX := g++
 ifeq ($(shell getconf LONG_BIT), 32)
 	SGX_ARCH := x86
 else ifeq ($(findstring -m32, $(CXXFLAGS)), -m32)

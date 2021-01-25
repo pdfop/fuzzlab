@@ -1,4 +1,4 @@
 # environment variables:
 AFL_KILL_SIGNAL=9
 # command line:
-'afl-fuzz' '-i' 'in/' '-o' 'out/' './app'
+'afl-fuzz' '-i' 'in' '-o' 'out' './app'

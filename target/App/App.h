@@ -18,7 +18,6 @@
 #include "/opt/intel/sgxsdk/include/sgx_eid.h"     // sgx_enclave_id_t 
 #include "/opt/intel/sgxsdk/include/sgx_uae_epid.h" // quoting process
 
-
 #ifndef TRUE
 # define TRUE 1
 #endif

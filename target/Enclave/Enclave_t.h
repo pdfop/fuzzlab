@@ -15,7 +15,19 @@
 extern "C" {
 #endif
 
+#ifndef _simpleStruct
+#define _simpleStruct
+typedef struct simpleStruct {
+	char* name;
+	int number;
+} simpleStruct;
+#endif
+
 void ecall_echo(const char* str);
+void ecall_input_dependent_accesses(const char* secret, size_t len);
+void ecall_file_handling(const char* fileIdentifier, size_t len);
+void ecall_math(int* numbers, size_t len);
+void ecall_custom_input(struct simpleStruct* simple);
 
 sgx_status_t SGX_CDECL ocall_print_string(const char* str);
 
