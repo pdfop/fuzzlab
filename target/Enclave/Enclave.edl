@@ -1,8 +1,18 @@
 enclave
 {
+    // built according to page 41 of  https://download.01.org/intel-sgx/sgx-linux/2.12/docs/Intel_SGX_Developer_Reference_Linux_2.12_Open_Source.pdf 
+    struct simpleStruct
+    {
+        char* name; 
+        int number; 
+    }; 
     trusted
     {
         public void ecall_echo([in, string] const char* str);
+        public void ecall_input_dependent_accesses([in, string] const char* secret, size_t len); 
+        public void ecall_file_handling([in, string] const char* fileIdentifier, size_t len); 
+        public void ecall_math([in] int* numbers, size_t len); 
+        public void ecall_custom_input([in]struct simpleStruct* simple); 
         
     };
     untrusted

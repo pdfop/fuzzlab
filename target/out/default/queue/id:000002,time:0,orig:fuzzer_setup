@@ -1,3 +1,0 @@
-# environment variables:
-# command line:
-'/home/mycurse/AFLplusplus/afl-fuzz' '-i' 'in' '-o' 'out' 'app'

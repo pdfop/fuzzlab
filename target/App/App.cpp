@@ -1,48 +1,54 @@
 // warning here propagates from warning in App.h, will be resolved at build time 
 #include "App.h"
- 
+#include <unistd.h>
+
+#pragma clang optimize off
+#pragma GCC            optimize("O0")
+
+ __AFL_FUZZ_INIT();
 void ocall_print_string(const char *str);
 std::vector<std::string> splitInput(std::string input); 
 
 // CDECL macro defines calling convention 
 int SGX_CDECL main(int argc, char *argv[])
 {
-    printf("Input: \n");
+    #ifdef __AFL_HAVE_MANUAL_CONTROL
+    __AFL_INIT();
+    #endif
+    unsigned char *buf = __AFL_FUZZ_TESTCASE_BUF;
+
+
     // buffer for the input string
-    char input[BUFSIZ]; 
+    //unsigned char buf[BUFSIZ]; 
     // reading from stdin into the buffer 
-    std::cin >> input;   
+    //std::cin >> buf;   
     // splittin input string on whitespace
-    std::string inputString(input);
-    std::vector<std::string> tokens = splitInput(inputString); 
+
+    //std::string inputString((char*)buf);
+    //std::vector<std::string> tokens = splitInput(inputString); 
     // if the fuzzer deleted a space the vector won't have enough elements to provide values for all parameters
-    if(tokens.size() < 4)
-    {
-        while(tokens.size()!= 4)
-        {
-            tokens.push_back("1234"); 
-        }
-    }
+    //if(tokens.size() < 4)
+    //{
+        //while(tokens.size()!= 4)
+        //{
+        //    tokens.push_back("1234"); 
+        //}
+    //}
     // ##### SDK AREA #### 
 
     // all function signatures are according to their definition in the SGX Developer Reference 
     // https://download.01.org/intel-sgx/sgx-linux/2.12/docs/Intel_SGX_Developer_Reference_Linux_2.12_Open_Source.pdf
     // interface and function specifications start at page 111 
 
-    // setting various parameters based on the fuzzer input 
-
+    // setting various parameters based on the fuzzer input  
     //controllable inputs 
-    sgx_launch_token_t token = {stoi(tokens[0])}; 
-    int updated = stoi(tokens[1]);
-    const uint8_t *revokeList = reinterpret_cast<const uint8_t*>(tokens[2].data());
-    uint32_t listSize = stoi(tokens[3]); 
+    sgx_launch_token_t token; 
+    int updated; 
     // set by calc_quote_size but can be changed when passed as input to get_qu
-    //uint32_t quoteSize = stoi(tokens[4]); 
+    uint32_t quoteSize;
     sgx_quote_sign_type_t linkFlag; 
-    //const sgx_spid_t servicdeId; 
-    //const sgx_quote_nonce_t nonce; 
-    //const uint8_t revokeListDiff[]; 
-    uint32_t listSizeDiff; 
+    // actual attestation id, requires intel account 
+    //const sgx_spid_t servicdeId;  
 
     // pointers used as function outputs 
 
@@ -64,26 +70,64 @@ int SGX_CDECL main(int argc, char *argv[])
        sgx_enclave_id_t* pointer to enclave id - set by function 
        sgx_misc_attribute_t* pointer to various information about the enclaves and its SECS - set by function, optional 
     */ 
+    // has to be called outside of the loop. huge performance cost 
     status = sgx_create_enclave(ENCLAVE_FILENAME, SGX_DEBUG_FLAG, &token, &updated, &global_eid, NULL); 
-    printf("Enclave successfully initilised.\n");
-    // making a basic ecall which will be followed by a basic ocall by the enclave 
-    ecall_echo(global_eid, input);
+ 
+        while(__AFL_LOOP(10000))
+    {
+        int len = __AFL_FUZZ_TESTCASE_LEN;
 
+
+        // input processing 
+        std::string inputString((char*)buf);
+        std::vector<std::string> tokens = splitInput(inputString);
+        while(tokens.size() < 4)
+        {
+            tokens.push_back("1234"); 
+        }
+
+        // create parameters from fuzzed input 
+        const uint8_t *revokeList = reinterpret_cast<const uint8_t*>(tokens[2].data());
+        uint32_t listSize = stoi(tokens[3]);
+        // currently set to be the same as when passed to calc/get_quote_size, can be fuzzed separately later 
+        //const uint8_t revokeListDiff[] = revokeList; 
+        //uint32_t listSizeDiff = listSize;  
+
+        const char* secret = tokens[4].c_str();
+        const char* fileIdentifier = tokens[5].c_str();
+        struct simpleStruct simple; 
+        simple.name = (char*) tokens[6].c_str();
+        simple.number = stoi(tokens[7]); 
+        int numbers[tokens.size() - 8];
+        for(int i = 0; i + 8  < tokens.size(); i++)
+        {
+            numbers[i] = stoi(tokens[i+8]); 
+        }
+
+        // various ecalls 
+
+        ecall_echo(global_eid, (char*)buf);
+        ecall_input_dependent_accesses(global_eid,secret, strlen(secret)); 
+        ecall_file_handling(global_eid, fileIdentifier, strlen(fileIdentifier)); 
+        ecall_math(global_eid, numbers, sizeof(numbers)); 
+        ecall_custom_input(global_eid, &simple); 
+
+    
     // quoting process 
 
     /* 
         sgx_target_info_t* pointer to the target info that will be used in the report - set by function 
         sgx_epid_group_id_t* pointer to the EPID of the system - set by function
     */
-         status = sgx_init_quote(&target, &gid);
-
+        status = sgx_init_quote(&target, &gid);
+    
     /*
         const uint8_t* revoke list of signatures, NULL if none are revoked 
         uint32_t size of the revoke list in bytes, expected to be 0 if list is NULL 
             there is probably some room to fuzz these two 
         uint32_t* pointer to the quote size - set by function
     */
-   // status = sgx_calc_quote_size(revokeList, listSize, &quoteSize);
+        status = sgx_calc_quote_size(revokeList, listSize, &quoteSize);
 
     /*
         deprecated function 
@@ -91,7 +135,7 @@ int SGX_CDECL main(int argc, char *argv[])
         doesn't take the second parameter from above 
         probably interesting to fuzz if it doesn't verify the buffer size of the revoke list? 
     */
-   // status = sgx_get_quote_size(revokeList, &quoteSize);
+        status = sgx_get_quote_size(revokeList, &quoteSize);
 
     /*
         const sgx_report_t* pointer to the report that will be quoted 
@@ -107,9 +151,13 @@ int SGX_CDECL main(int argc, char *argv[])
     */
     //status = sgx_get_quote(*report, linkFlag, *servicdeId, *nonce, *revokeListDiff, listSizeDiff, *qeReport, quoteSize);
     
+    }
+
     // destroying enclave 
     sgx_status_t enclave_status = sgx_destroy_enclave(global_eid);
-    printf("\nEnclave Destroyed\n"); 
+    
+    
+ 
 }
 
 /*
