@@ -1,4 +1,5 @@
 target/out
+nosgx/out
 hello/out
 app
 env

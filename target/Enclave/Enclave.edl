@@ -8,7 +8,7 @@ enclave
     }; 
     trusted
     {
-        public void ecall_echo([in, string] const char* str);
+        public void ecall_echo([in, string] const char* str, size_t len);
         public void ecall_input_dependent_accesses([in, string] const char* secret, size_t len); 
         public void ecall_file_handling([in, string] const char* fileIdentifier, size_t len); 
         public void ecall_math([in] int* numbers, size_t len); 

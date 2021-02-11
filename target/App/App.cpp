@@ -17,23 +17,6 @@ int SGX_CDECL main(int argc, char *argv[])
     #endif
     unsigned char *buf = __AFL_FUZZ_TESTCASE_BUF;
 
-
-    // buffer for the input string
-    //unsigned char buf[BUFSIZ]; 
-    // reading from stdin into the buffer 
-    //std::cin >> buf;   
-    // splittin input string on whitespace
-
-    //std::string inputString((char*)buf);
-    //std::vector<std::string> tokens = splitInput(inputString); 
-    // if the fuzzer deleted a space the vector won't have enough elements to provide values for all parameters
-    //if(tokens.size() < 4)
-    //{
-        //while(tokens.size()!= 4)
-        //{
-        //    tokens.push_back("1234"); 
-        //}
-    //}
     // ##### SDK AREA #### 
 
     // all function signatures are according to their definition in the SGX Developer Reference 
@@ -73,45 +56,70 @@ int SGX_CDECL main(int argc, char *argv[])
     // has to be called outside of the loop. huge performance cost 
     status = sgx_create_enclave(ENCLAVE_FILENAME, SGX_DEBUG_FLAG, &token, &updated, &global_eid, NULL); 
  
-        while(__AFL_LOOP(10000))
+    while(__AFL_LOOP(10000))
     {
         int len = __AFL_FUZZ_TESTCASE_LEN;
-
-
-        // input processing 
+        // split input string 
         std::string inputString((char*)buf);
         std::vector<std::string> tokens = splitInput(inputString);
-        while(tokens.size() < 4)
-        {
-            tokens.push_back("1234"); 
-        }
 
-        // create parameters from fuzzed input 
-        const uint8_t *revokeList = reinterpret_cast<const uint8_t*>(tokens[2].data());
-        uint32_t listSize = stoi(tokens[3]);
-        // currently set to be the same as when passed to calc/get_quote_size, can be fuzzed separately later 
-        //const uint8_t revokeListDiff[] = revokeList; 
-        //uint32_t listSizeDiff = listSize;  
-
-        const char* secret = tokens[4].c_str();
-        const char* fileIdentifier = tokens[5].c_str();
+        // process input based on target functions 
+        const char* secret = tokens[0].c_str();
+        const char* fileIdentifier = tokens[1].c_str();
         struct simpleStruct simple; 
-        simple.name = (char*) tokens[6].c_str();
-        simple.number = stoi(tokens[7]); 
-        int numbers[tokens.size() - 8];
-        for(int i = 0; i + 8  < tokens.size(); i++)
+        simple.name = (char*) tokens[2].c_str();
+
+        // assert entry can be converted to number 
+        const char *token = tokens[3].c_str(); 
+        bool isNumber = true; 
+        for(int x = 0; x < strlen(token); x++)
         {
-            numbers[i] = stoi(tokens[i+8]); 
+            if(token[x] > 9 || token[x] < 0)
+            {
+                isNumber = false;
+                break;  
+            }
+        }
+        if(isNumber)
+        {
+            simple.number = atoi(token); 
+        }
+        else
+        {
+            simple.number = 3; 
         }
 
-        // various ecalls 
+        // assumption can be made as tokens is filled up the the needed length in the splitInput function 
+        int numbers[tokens.size() - 3];
 
-        ecall_echo(global_eid, (char*)buf);
-        ecall_input_dependent_accesses(global_eid,secret, strlen(secret)); 
-        ecall_file_handling(global_eid, fileIdentifier, strlen(fileIdentifier)); 
+        for(int i = 0; i + 3 < tokens.size(); i++)
+        {   
+            token = tokens[i+3].c_str(); 
+            isNumber = true; 
+            for(int x = 0; x < strlen(token); x++)
+            {
+                if(token[x] > 9 || token[x] < 0)
+                {
+                    isNumber = false;
+                    break;  
+                }
+            }
+            if(isNumber)
+            {
+                numbers[i] = atoi(token); 
+            }
+            else
+            {
+                numbers[i] = 1; 
+            }
+        }
+
+        // call target functions
+        ecall_echo(global_eid, (char*)buf, strlen((char*) buf));
+        ecall_input_dependent_accesses(global_eid,  secret, strlen(secret)); 
+        //ecall_file_handling(global_eid, fileIdentifier, strlen(fileIdentifier)); 
         ecall_math(global_eid, numbers, sizeof(numbers)); 
-        ecall_custom_input(global_eid, &simple); 
-
+        ecall_custom_input(global_eid, &simple);  
     
     // quoting process 
 
@@ -127,7 +135,7 @@ int SGX_CDECL main(int argc, char *argv[])
             there is probably some room to fuzz these two 
         uint32_t* pointer to the quote size - set by function
     */
-        status = sgx_calc_quote_size(revokeList, listSize, &quoteSize);
+       // status = sgx_calc_quote_size(revokeList, listSize, &quoteSize);
 
     /*
         deprecated function 
@@ -135,7 +143,7 @@ int SGX_CDECL main(int argc, char *argv[])
         doesn't take the second parameter from above 
         probably interesting to fuzz if it doesn't verify the buffer size of the revoke list? 
     */
-        status = sgx_get_quote_size(revokeList, &quoteSize);
+        //status = sgx_get_quote_size(revokeList, &quoteSize);
 
     /*
         const sgx_report_t* pointer to the report that will be quoted 
@@ -168,8 +176,12 @@ void ocall_print_string(const char *str)
     printf("%s", str);
 }
 
+// I/O processing function 
 std::vector<std::string> splitInput(std::string input)
 {
+    // input is fed to this function by the fuzzer directly 
+    // input is always a single string that needs to be split into multiple values to create multiple parameters 
+    // parameter values are supposed to be split by white space in the input file 
     std::vector<std::string> tokens; 
     std::string buffer; 
     std::stringstream stream(input); 
@@ -178,5 +190,13 @@ std::vector<std::string> splitInput(std::string input)
     {
         tokens.push_back(buffer);
     }
+
+     // assert vector has enough elements even when fuzzer deletes spaces 
+    while(tokens.size() < 6)
+    {
+        // numbers are safe for all parameters,so add numbers 
+       tokens.push_back("1234"); 
+    }
+    
     return tokens; 
 }
