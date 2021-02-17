@@ -7,8 +7,8 @@ requires:
 	https://github.com/intel/linux-sgx-driver  
 	working SGX PSW from any source  
 
-Files for the Host App are located in ./App 
-File for the Enclave are located in ./Enclave 
+Files for the Host App are located in ./App   
+Files for the Enclave are located in ./Enclave   
 Enclave.edl defines the ECALL/OCALL interface available for the enclave     
 Enclave.config.xml manages parameters such as stack size, heap size and maximum number of threads     
 Enclave_private key pair is used during initialization     
