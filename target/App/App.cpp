@@ -3,10 +3,13 @@
 #include <unistd.h>
 #include <stdlib.h>
 
+// major performance improvement through compiler optimization 
 #pragma clang optimize off
 #pragma GCC            optimize("O0")
 
+// initializes persistent mode 
  __AFL_FUZZ_INIT();
+
 void ocall_print_string(const char *str);
 std::vector<std::string> splitInput(std::string input); 
 int assertNumber(const char* token); 
@@ -17,6 +20,7 @@ int SGX_CDECL main(int argc, char *argv[])
     #ifdef __AFL_HAVE_MANUAL_CONTROL
     __AFL_INIT();
     #endif
+    // AFL fuzzing input buffer
     unsigned char *buf = __AFL_FUZZ_TESTCASE_BUF;
 
     // ##### SDK AREA #### 
@@ -31,18 +35,22 @@ int SGX_CDECL main(int argc, char *argv[])
 
     // while these are controllable we cannot really set them as they are only used during enclave creation
     // which has to be done outside of the loop as looping it will kill performance 
+    // they are also officially deprecated 
     sgx_launch_token_t token; 
     int updated; 
-    // set by calc_quote_size but can be changed when passed as input to get_qu
+    // set by calc_quote_size but can be changed when passed as input to get_quote
     uint32_t quoteSize;
+    // only used during actual quote, needs spid 
     sgx_quote_sign_type_t linkFlag;
-    uint32_t listSize; 
+    // size of the revoke list 
+    uint32_t listSize;
     const uint8_t* revokeList;  
     // actual attestation id, requires intel account 
     //const sgx_spid_t servicdeId;  
 
     // pointers used as function outputs 
 
+    // global id of our enclave, needs to be passed to each ecall 
     sgx_enclave_id_t global_eid = 0;
     //status variable that will be used to hold return value of the last SDK call 
     sgx_status_t status;
@@ -57,7 +65,7 @@ int SGX_CDECL main(int argc, char *argv[])
     const char* fileIdentifier;
     struct simpleStruct simple; 
 
-    // input management 
+    // input management variable
     std::vector<std::string> tokens;
 
     // creating an enclave 
@@ -73,9 +81,14 @@ int SGX_CDECL main(int argc, char *argv[])
     // has to be called outside of the loop. huge performance cost 
     status = sgx_create_enclave(ENCLAVE_FILENAME, SGX_DEBUG_FLAG, &token, &updated, &global_eid, NULL); 
  
+    // fuzzing target needs to be in the __AFL_LOOP while loop 
+    // number indicates runs before full program restart, setting higher/lower mostly affects memory leaks etc 
+    // in this cause the number also dictates how often the enclave is built&destroyed, setting it lower will negatively impact performance
     while(__AFL_LOOP(10000))
     {
+        // has to be first statement in loop for persistent mode, do not move, remove or reuse the macro 
         int len = __AFL_FUZZ_TESTCASE_LEN;
+
         // split input string 
         std::string inputString((char*)buf);
         tokens = splitInput(inputString);
@@ -83,14 +96,11 @@ int SGX_CDECL main(int argc, char *argv[])
         // process input based on target functions 
 
         // controllable inputs for sdk quoting functions 
-        // set by calc_quote_size but can be changed when passed as input to get_qu
         quoteSize = assertNumber(tokens[0].c_str()); 
-        // only used during actual quote, needs spid 
         //linkFlag  
         listSize = assertNumber(tokens[1].c_str());  
         revokeList = (const uint8_t*) atoi(tokens[2].c_str()); 
-        // actual attestation id, requires intel account 
-        //const sgx_spid_t servicdeId; 
+        //servicdeId; 
 
         // inputs for custom ecalls 
         secret = tokens[3].c_str();
@@ -100,7 +110,7 @@ int SGX_CDECL main(int argc, char *argv[])
         // assert entry can be converted to number 
         simple.number = assertNumber(tokens[6].c_str());  
 
-        // assumption can be made as tokens is filled up the the needed length in the splitInput function 
+        // assumption can be made as tokens is filled up to the needed length in the splitInput function 
         int numbers[tokens.size() - 6];
 
         for(int i = 0; i + 6 < tokens.size(); i++)
@@ -111,49 +121,48 @@ int SGX_CDECL main(int argc, char *argv[])
         // call target functions
         ecall_echo(global_eid, (char*)buf, strlen((char*) buf));
         ecall_input_dependent_accesses(global_eid,  secret, strlen(secret)); 
+        // has no implementation, not calling it for now 
         //ecall_file_handling(global_eid, fileIdentifier, strlen(fileIdentifier)); 
         ecall_math(global_eid, numbers, sizeof(numbers)); 
         ecall_custom_input(global_eid, &simple);  
     
-    // quoting process 
+        // quoting process     
 
-    
-
-    /* 
-        sgx_target_info_t* pointer to the target info that will be used in the report - set by function 
-        sgx_epid_group_id_t* pointer to the EPID of the system - set by function
-    */
+        /* 
+            sgx_target_info_t* pointer to the target info that will be used in the report - set by function 
+            sgx_epid_group_id_t* pointer to the EPID of the system - set by function
+        */
         status = sgx_init_quote(&target, &gid);
     
-    /*
-        const uint8_t* revoke list of signatures, NULL if none are revoked 
-        uint32_t size of the revoke list in bytes, expected to be 0 if list is NULL 
-            there is probably some room to fuzz these two 
-        uint32_t* pointer to the quote size - set by function
-    */
+        /*
+            const uint8_t* revoke list of signatures, NULL if none are revoked 
+            uint32_t size of the revoke list in bytes, expected to be 0 if list is NULL 
+                there is probably some room to fuzz these two 
+            uint32_t* pointer to the quote size - set by function
+        */
         status = sgx_calc_quote_size(revokeList, listSize, &quoteSize);
 
-    /*
-        deprecated function 
-        used to fulfill the role of calc_quote_size 
-        doesn't take the second parameter from above 
-        probably interesting to fuzz if it doesn't verify the buffer size of the revoke list? 
-    */
+        /*
+            deprecated function 
+            used to fulfill the role of calc_quote_size 
+            doesn't take the second parameter from above 
+            probably interesting to fuzz if it doesn't verify the buffer size of the revoke list? 
+        */
         status = sgx_get_quote_size(revokeList, &quoteSize);
 
-    /*
-        const sgx_report_t* pointer to the report that will be quoted 
-        sgx_quote_sign_type_t   flag for linkable or unlinkable quote, intended values SGX_UNLINKABLE_SIGNATURE and SGX_LINKABLE_SIGNATURE
-        const sgx_spid_t* service provider id 
-        const sgx_quote_nonce_t* optional nonce, linked to sgx_report_t* - if one is NULL the other has be to NULL as well 
-        const uint8_t* optional revoke list of signatures 
-        uint32_t    size of the revoke list in bytes, should again be 0 if list is NULL
-        sgx_report_t* pointer to the QE report used for this quote, optional output - set by function, expects nonce not to be NULL if this is not NULL 
-        sgx_quote_t* pointer to the main quote output - set by function 
-        uint32_t quote buffer size, expects the value that can be calculate by passing the size revoke list to sgx_calc_quote_size 
-            probably also interesting to fuzz 
-    */
-    //status = sgx_get_quote(*report, linkFlag, *servicdeId, *nonce, *revokeListDiff, listSizeDiff, *qeReport, quoteSize);
+        /*
+            const sgx_report_t* pointer to the report that will be quoted 
+            sgx_quote_sign_type_t   flag for linkable or unlinkable quote, intended values SGX_UNLINKABLE_SIGNATURE and SGX_LINKABLE_SIGNATURE
+            const sgx_spid_t* service provider id 
+            const sgx_quote_nonce_t* optional nonce, linked to sgx_report_t* - if one is NULL the other has be to NULL as well 
+            const uint8_t* optional revoke list of signatures 
+            uint32_t    size of the revoke list in bytes, should again be 0 if list is NULL
+            sgx_report_t* pointer to the QE report used for this quote, optional output - set by function, expects nonce not to be NULL if this is not NULL 
+            sgx_quote_t* pointer to the main quote output - set by function 
+            uint32_t quote buffer size, expects the value that can be calculate by passing the size revoke list to sgx_calc_quote_size 
+                probably also interesting to fuzz 
+        */
+        //status = sgx_get_quote(*report, linkFlag, *servicdeId, *nonce, *revokeListDiff, listSizeDiff, *qeReport, quoteSize);
     
     }
 

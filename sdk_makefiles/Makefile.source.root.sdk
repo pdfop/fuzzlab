@@ -64,10 +64,10 @@ LIBTSE     := $(BUILD_DIR)/libsgx_tservice.a
 components: tstdc tcxx tservice trts tcrypto tkey_exchange ukey_exchange tprotected_fs uprotected_fs ptrace sample_crypto libcapable simulation signtool edger8r tcmalloc sgx_pcl sgx_encrypt sgx_tswitchless sgx_uswitchless pthread openmp
 
 .PHONY: untrustedrts
-untrustedrts: ukey_exchange uprotected_fs sample_crypto signtool edger8r sgx_pcl sgx_encrypt sgx_uswitchless
+untrustedrts: ukey_exchange uprotected_fs sample_crypto signtool edger8r sgx_pcl sgx_encrypt sgx_uswitchless simulation openmp
 
 .PHONY: trustedrts
-trustedrts: tstdc tcxx tservice trts tcrypto tkey_exchange tprotected_fs libcapable simulation tcmalloc pthread openmp sgx_tswitchless ptrace
+trustedrts: tstdc tcxx libcapable pthread ptrace trts sgx_tswitchless tcmalloc tservice tcrypto tkey_exchange tprotected_fs
 # ---------------------------------------------------
 #  tstdc
 #      includes: tlibc, tlibthread, compiler-rt, tsafecrt
