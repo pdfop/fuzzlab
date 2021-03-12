@@ -50,7 +50,7 @@ endif
 App_Cpp_Files := App/App.cpp
 App_Include_Paths := -IInclude -IApp -I$(SGX_SDK)/include
 
-App_C_Flags := $(SGX_COMMON_CFLAGS) -fPIC -Wno-attributes $(App_Include_Paths)
+App_C_Flags := $(SGX_COMMON_CFLAGS) -ggdb -fPIC -Wno-attributes $(App_Include_Paths)
 
 # Three configuration modes - Debug, prerelease, release
 #   Debug - Macro DEBUG enabled.

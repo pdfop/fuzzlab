@@ -13,15 +13,7 @@
 
 void ecall_echo(const char* str, size_t len)
 {
-    const char* echo = "echo "; 
-    int bufsiz = len + strlen(echo);
-    char buffer[bufsiz];
-    for(int i = 0; i<strlen(echo); i++)
-    {
-        buffer[i] = echo[i]; 
-    }
-    strncat(buffer,str, len); 
-   ocall_print_string(buffer);
+   ocall_print_string(str);
 }
 
 void ecall_input_dependent_accesses(const char* secret, size_t len)

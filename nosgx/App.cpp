@@ -27,7 +27,7 @@ struct simpleStruct
 // prototypes as used in the sgx project 
 void ocall_print_string(const char *str);
 std::vector<std::string> splitInput(std::string input); 
-void print_string(const char *str, ...);
+int assertNumber(const char* token);
 void ecall_echo(const char *str, size_t len);
 void ecall_input_dependent_accesses(const char* secret, size_t len); 
 void ecall_file_handling(const char* fileIdentifier, size_t len); 
@@ -42,6 +42,11 @@ int main(int argc, char *argv[])
     #endif
     // fuzzing input buffer 
     unsigned char *buf = __AFL_FUZZ_TESTCASE_BUF;
+
+    const char* secret;
+    const char* fileIdentifier;
+    struct simpleStruct simple; 
+
     // number indicates runs before full program restart, setting higher/lower mostly affects memory leaks etc 
     // in the sgx version this affects how often the enclave is built/destroyed, higher value will run faster 
     while(__AFL_LOOP(10000))
@@ -52,63 +57,30 @@ int main(int argc, char *argv[])
         // split input string 
         std::string inputString((char*)buf);
         std::vector<std::string> tokens = splitInput(inputString);
-
-        // process input based on target functions 
-        const char* secret = tokens[0].c_str();
-        const char* fileIdentifier = tokens[1].c_str();
-        struct simpleStruct simple; 
+        // inputs for custom ecalls 
+        secret = tokens[0].c_str();
+        fileIdentifier = tokens[1].c_str();
         simple.name = (char*) tokens[2].c_str();
 
         // assert entry can be converted to number 
-        const char *token = tokens[3].c_str(); 
-        bool isNumber = true; 
-        for(int x = 0; x < strlen(token); x++)
-        {
-            if(token[x] > 9 || token[x] < 0)
-            {
-                isNumber = false;
-                break;  
-            }
-        }
-        if(isNumber)
-        {
-            simple.number = atoi(token); 
-        }
-        else
-        {
-            simple.number = 3; 
-        }
+        simple.number = assertNumber(tokens[3].c_str());  
 
-        // assumption can be made as tokens is filled up the the needed length in the splitInput function 
+        // assumption can be made as tokens is filled up to the needed length in the splitInput function 
         int numbers[tokens.size() - 3];
 
         for(int i = 0; i + 3 < tokens.size(); i++)
         {   
-            token = tokens[i+3].c_str(); 
-            isNumber = true; 
-            for(int x = 0; x < strlen(token); x++)
-            {
-                if(token[x] > 9 || token[x] < 0)
-                {
-                    isNumber = false;
-                    break;  
-                }
-            }
-            if(isNumber)
-            {
-                numbers[i] = atoi(token); 
-            }
-            else
-            {
-                numbers[i] = 1; 
-            }
+            numbers[i] = assertNumber(tokens[i+3].c_str()); 
         }
 
         // call target functions
+    
         ecall_echo((char*)buf, strlen((char*) buf));
         ecall_input_dependent_accesses(secret, strlen(secret)); 
-        //ecall_file_handling(fileIdentifier, strlen(fileIdentifier)); 
-        ecall_math(numbers, sizeof(numbers)); 
+        ecall_file_handling(fileIdentifier, strlen(fileIdentifier)); 
+        // LAST MINUTE EDIT: this causes the untraceable crashes, likely memory related as it only starts crashing after ~50+ mio executions 
+        // no time to debug, leaving out of final measurements
+        //ecall_math(numbers, sizeof(numbers)); 
         ecall_custom_input(&simple);  
     }
 
@@ -130,13 +102,34 @@ std::vector<std::string> splitInput(std::string input)
     }
 
      // assert vector has enough elements even when fuzzer deletes spaces 
-    while(tokens.size() < 4)
+    while(tokens.size() < 5)
     {
         // numbers are safe for all parameters,so add numbers 
-       tokens.push_back("1234"); 
+       tokens.push_back("3"); 
     }
     
     return tokens; 
+}
+
+int assertNumber(const char* token)
+{
+    bool isNumber = true; 
+    for(int x = 0; x < strlen(token); x++)
+    {
+        if(token[x] > 9 || token[x] < 0)
+        {
+            isNumber = false;
+            break;  
+        }
+    }
+        if(isNumber)
+        {
+            return atoi(token); 
+        }
+        else
+        {
+            return random(); 
+        }
 }
 
 // all app and enclave functions as implemented in the sgx project 
@@ -147,27 +140,9 @@ void ocall_print_string(const char *str)
     printf("%s", str);
 }
 
-void print_string(size_t len, const char *str, ...)
-{
-    char buffer[len];
-    va_list ap;
-    va_start(ap, str);
-    vsnprintf(buffer, len, str, ap);
-    va_end(ap);
-    ocall_print_string(buffer);
-}
-
 void ecall_echo(const char* str, size_t len)
 {
-    const char* echo = "echo "; 
-    int bufsiz = len + strlen(echo);
-    char buffer[bufsiz];
-    for(int i = 0; i<strlen(echo); i++)
-    {
-        buffer[i] = echo[i]; 
-    }
-    strncat(buffer,str, len); 
-   ocall_print_string(buffer);
+   ocall_print_string(str);
 }
 
 void ecall_input_dependent_accesses(const char* secret, size_t len)

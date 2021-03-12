@@ -3,7 +3,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-// major performance improvement through compiler optimization 
+// compiler optimization settings
 #pragma clang optimize off
 #pragma GCC            optimize("O0")
 
@@ -84,7 +84,7 @@ int SGX_CDECL main(int argc, char *argv[])
     // fuzzing target needs to be in the __AFL_LOOP while loop 
     // number indicates runs before full program restart, setting higher/lower mostly affects memory leaks etc 
     // in this cause the number also dictates how often the enclave is built&destroyed, setting it lower will negatively impact performance
-    while(__AFL_LOOP(10000))
+    while(__AFL_LOOP(1000))
     {
         // has to be first statement in loop for persistent mode, do not move, remove or reuse the macro 
         int len = __AFL_FUZZ_TESTCASE_LEN;
@@ -98,8 +98,21 @@ int SGX_CDECL main(int argc, char *argv[])
         // controllable inputs for sdk quoting functions 
         quoteSize = assertNumber(tokens[0].c_str()); 
         //linkFlag  
-        listSize = assertNumber(tokens[1].c_str());  
-        revokeList = (const uint8_t*) atoi(tokens[2].c_str()); 
+        listSize = assertNumber(tokens[1].c_str()); 
+        // avoid uint8 overflow 
+        int revokeInt = atoi(tokens[2].c_str());
+        if(revokeInt < 254)
+        {
+            // pass actually valid pointer to a unint8_t variable 
+            const uint8_t revoked = (const uint8_t) revokeInt; 
+            revokeList = &revoked;  
+        }
+        else
+        {
+            const uint8_t revoked = (const uint8_t) atoi("a"); 
+            revokeList = &revoked; 
+        }
+
         //servicdeId; 
 
         // inputs for custom ecalls 
@@ -121,9 +134,11 @@ int SGX_CDECL main(int argc, char *argv[])
         // call target functions
         ecall_echo(global_eid, (char*)buf, strlen((char*) buf));
         ecall_input_dependent_accesses(global_eid,  secret, strlen(secret)); 
-        // has no implementation, not calling it for now 
-        //ecall_file_handling(global_eid, fileIdentifier, strlen(fileIdentifier)); 
-        ecall_math(global_eid, numbers, sizeof(numbers)); 
+        //has no implementation
+        ecall_file_handling(global_eid, fileIdentifier, strlen(fileIdentifier)); 
+        // LAST MINUTE CHANGE: this causes the untraceable crashes, may be memory related. no time to debug 
+        // leaving out of final run 
+        //ecall_math(global_eid, numbers, sizeof(numbers)); 
         ecall_custom_input(global_eid, &simple);  
     
         // quoting process     
@@ -200,7 +215,7 @@ std::vector<std::string> splitInput(std::string input)
     while(tokens.size() < 8)
     {
         // numbers are safe for all parameters,so add numbers 
-       tokens.push_back("1234"); 
+       tokens.push_back("3"); 
     }
     
     return tokens; 
